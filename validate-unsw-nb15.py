@@ -31,16 +31,12 @@ import numpy as np
 from driver import io_shape_dict
 from driver_base import FINNExampleOverlay
 
-
-def make_unsw_nb15_test_batches(bsize, dataset_root):
-    unsw_nb15_data = np.load(dataset_root + "/unsw_nb15_binarized.npz")["test"][:82000]
-    test_imgs = unsw_nb15_data[:, :-1]
-    test_labels = unsw_nb15_data[:, -1]
-    n_batches = int(test_imgs.shape[0] / bsize)
-    test_imgs = test_imgs.reshape(n_batches, bsize, -1)
-    test_labels = test_labels.reshape(n_batches, bsize)
-    return (test_imgs, test_labels)
-
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms, models
+from PIL import Image
+import os
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -99,3 +95,74 @@ if __name__ == "__main__":
 
     acc = 100.0 * ok / (total)
     print("Final accuracy: %f" % acc)
+
+
+    input_size = (3, 64, 64)
+
+    def inference_with_finn_onnx(current_inp):
+        current_inp = current_inp.reshape(input_size)
+        out = driver.execute(current_inp)
+        return finn_output
+
+
+    data_path = dataset_root + "/CT-KIDNEY-DATASET-Normal-Cyst-Tumor-Stone/CT-KIDNEY-DATASET-Normal-Cyst-Tumor-Stone"
+
+    # Prepare dataset
+    def load_dataset(data_path):
+        images = []
+        labels = []
+        for subfolder in os.listdir(data_path):
+            subfolder_path = os.path.join(data_path, subfolder)
+            if not os.path.isdir(subfolder_path):
+                continue
+            for image_filename in os.listdir(subfolder_path):
+                image_path = os.path.join(subfolder_path, image_filename)
+                images.append(image_path)
+                labels.append(subfolder)
+        return pd.DataFrame({'image': images, 'label': labels})
+
+    data = load_dataset(data_path)
+    train_df, dummy_df = train_test_split(data, train_size=0.01, shuffle=True, stratify=data['label'], random_state=123)
+    valid_df, dummy_df = train_test_split(dummy_df, train_size=0.01, shuffle=True, stratify=dummy_df['label'], random_state=123)
+    test_df, dummy_df = train_test_split(dummy_df, train_size=0.01, shuffle=True, stratify=dummy_df['label'], random_state=123)
+
+    # Define Custom Dataset class
+    class CustomDataset(Dataset):
+        def __init__(self, dataframe, transform=None, class_indices=None):
+            self.dataframe = dataframe
+            self.transform = transform
+            self.class_indices = class_indices
+
+        def __len__(self):
+            return len(self.dataframe)
+
+        def __getitem__(self, idx):
+            img_path = self.dataframe.iloc[idx]['image']
+            image = Image.open(img_path).convert('RGB')
+            label = self.class_indices[self.dataframe.iloc[idx]['label']]
+
+            if self.transform:
+                image = self.transform(image)
+
+            return image, label
+
+
+    transform = transforms.Compose([
+        transforms.Resize(input_size[1:3]),
+        #transforms.RandomHorizontalFlip(),
+        #transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    # Create datasets and loaders
+    class_indices = {label: idx for idx, label in enumerate(test_df['label'].unique())}
+    test_dataset = CustomDataset(test_df, transform=transform, class_indices=class_indices)
+
+
+    for images, labels in test_dataset:
+        # run in Brevitas with PyTorch tensor
+        # print(images.shape)
+        current_inp = images.reshape((1, input_size[0], input_size[1], input_size[2]))
+        finn_output = inference_with_finn_onnx(current_inp)
+        print(finn_output)
