@@ -33,8 +33,6 @@ from driver_base import FINNExampleOverlay
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms, models
 from PIL import Image
 import os
 
@@ -106,25 +104,23 @@ if __name__ == "__main__":
 
             return image, label
 
-    transform = transforms.Compose([
-        transforms.Resize(input_size[1:3]),
-        #transforms.RandomHorizontalFlip(),
-        #transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    #transform = transforms.Compose([
+    #    transforms.Resize(input_size[1:3]),
+    #    #transforms.RandomHorizontalFlip(),
+    #    #transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+    #    transforms.ToTensor(),
+    #    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    #])
 
     # Create datasets and loaders
     class_indices = {label: idx for idx, label in enumerate(test_df['label'].unique())}
-    test_dataset = CustomDataset(test_df, transform=transform, class_indices=class_indices)
-    
 
     ok = 0
     nok = 0
-    n_batches = test_df.shape[0]
-    total = n_batches * bsize
+    #n_batches = test_df.shape[0]
+    #total = n_batches * bsize
 
-    n_batches = int(total / bsize)
+    #n_batches = int(total / bsize)
     
     print("Initializing driver, flashing bitfile...")
 
@@ -142,7 +138,7 @@ if __name__ == "__main__":
 
     print("Starting...")
 
-    for images, labels in test_dataset:
+    for images, labels in test_df:
         # run in Brevitas with PyTorch tensor
         # print(images.shape)
         current_inp = images.reshape((1, input_size[0], input_size[1], input_size[2]))
@@ -153,10 +149,10 @@ if __name__ == "__main__":
         matches = np.count_nonzero(finn_output.flatten() == labels.flatten())
         nok += bsize - matches
         ok += matches
-        print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
+        #print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
 
 
-    acc = 100.0 * ok / (total)
-    print("Final accuracy: %f" % acc)
+    #acc = 100.0 * ok / (total)
+    #print("Final accuracy: %f" % acc)
 
 
