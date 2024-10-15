@@ -85,24 +85,24 @@ if __name__ == "__main__":
     valid_df, test_df = train_test_split(dummy_df, train_size=0.5, shuffle=True, stratify=dummy_df['label'], random_state=123)
 
     # Define Custom Dataset class
-    class CustomDataset(Dataset):
-        def __init__(self, dataframe, transform=None, class_indices=None):
-            self.dataframe = dataframe
-            self.transform = transform
-            self.class_indices = class_indices
+    #class CustomDataset(Dataset):
+    #    def __init__(self, dataframe, transform=None, class_indices=None):
+    #        self.dataframe = dataframe
+    #        self.transform = transform
+    #        self.class_indices = class_indices
 
-        def __len__(self):
-            return len(self.dataframe)
+    #    def __len__(self):
+    #        return len(self.dataframe)
 
-        def __getitem__(self, idx):
-            img_path = self.dataframe.iloc[idx]['image']
-            image = Image.open(img_path).convert('RGB')
-            label = self.class_indices[self.dataframe.iloc[idx]['label']]
+    #    def __getitem__(self, idx):
+    #        img_path = self.dataframe.iloc[idx]['image']
+    #        image = Image.open(img_path).convert('RGB')
+    #        label = self.class_indices[self.dataframe.iloc[idx]['label']]
 
-            if self.transform:
-                image = self.transform(image)
+    #        if self.transform:
+    #            image = self.transform(image)
 
-            return image, label
+    #        return image, label
 
     #transform = transforms.Compose([
     #    transforms.Resize(input_size[1:3]),
