@@ -62,49 +62,10 @@ if __name__ == "__main__":
     dataset_root = args.dataset_root
 
     print("Loading dataset...")
-    (test_imgs, test_labels) = make_unsw_nb15_test_batches(bsize, dataset_root)
-
-    ok = 0
-    nok = 0
-    n_batches = test_imgs.shape[0]
-    total = n_batches * bsize
-
-    print("Initializing driver, flashing bitfile...")
-
-    driver = FINNExampleOverlay(
-        bitfile_name=bitfile,
-        platform=platform,
-        io_shape_dict=io_shape_dict,
-        batch_size=bsize,
-    )
-
-    n_batches = int(total / bsize)
-
-    print("Starting...")
-
-    for i in range(n_batches):
-        inp = np.pad(test_imgs[i].astype(np.float32), [(0, 0), (0, 7)], mode="constant")
-        exp = test_labels[i].astype(np.float32)
-        inp = 2 * inp - 1
-        exp = 2 * exp - 1
-        out = driver.execute(inp)
-        matches = np.count_nonzero(out.flatten() == exp.flatten())
-        nok += bsize - matches
-        ok += matches
-        print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
-
-    acc = 100.0 * ok / (total)
-    print("Final accuracy: %f" % acc)
-
+    #(test_imgs, test_labels) = make_unsw_nb15_test_batches(bsize, dataset_root)
 
     input_size = (3, 64, 64)
-
-    def inference_with_finn_onnx(current_inp):
-        current_inp = current_inp.reshape(input_size)
-        out = driver.execute(current_inp)
-        return finn_output
-
-
+    
     data_path = dataset_root + "/CT-KIDNEY-DATASET-Normal-Cyst-Tumor-Stone/CT-KIDNEY-DATASET-Normal-Cyst-Tumor-Stone"
 
     # Prepare dataset
@@ -122,9 +83,8 @@ if __name__ == "__main__":
         return pd.DataFrame({'image': images, 'label': labels})
 
     data = load_dataset(data_path)
-    train_df, dummy_df = train_test_split(data, train_size=0.01, shuffle=True, stratify=data['label'], random_state=123)
-    valid_df, dummy_df = train_test_split(dummy_df, train_size=0.01, shuffle=True, stratify=dummy_df['label'], random_state=123)
-    test_df, dummy_df = train_test_split(dummy_df, train_size=0.01, shuffle=True, stratify=dummy_df['label'], random_state=123)
+    train_df, dummy_df = train_test_split(data, train_size=0.8, shuffle=True, stratify=data['label'], random_state=123)
+    valid_df, test_df = train_test_split(dummy_df, train_size=0.5, shuffle=True, stratify=dummy_df['label'], random_state=123)
 
     # Define Custom Dataset class
     class CustomDataset(Dataset):
@@ -146,7 +106,6 @@ if __name__ == "__main__":
 
             return image, label
 
-
     transform = transforms.Compose([
         transforms.Resize(input_size[1:3]),
         #transforms.RandomHorizontalFlip(),
@@ -158,11 +117,46 @@ if __name__ == "__main__":
     # Create datasets and loaders
     class_indices = {label: idx for idx, label in enumerate(test_df['label'].unique())}
     test_dataset = CustomDataset(test_df, transform=transform, class_indices=class_indices)
+    
 
+    ok = 0
+    nok = 0
+    n_batches = test_df.shape[0]
+    total = n_batches * bsize
+
+    n_batches = int(total / bsize)
+    
+    print("Initializing driver, flashing bitfile...")
+
+    driver = FINNExampleOverlay(
+        bitfile_name=bitfile,
+        platform=platform,
+        io_shape_dict=io_shape_dict,
+        batch_size=bsize,
+    )
+
+    def inference_with_finn_onnx(current_inp):
+        current_inp = current_inp.reshape(input_size)
+        out = driver.execute(current_inp)
+        return finn_output
+
+    print("Starting...")
 
     for images, labels in test_dataset:
         # run in Brevitas with PyTorch tensor
         # print(images.shape)
         current_inp = images.reshape((1, input_size[0], input_size[1], input_size[2]))
         finn_output = inference_with_finn_onnx(current_inp)
+        
         print(finn_output)
+        
+        matches = np.count_nonzero(finn_output.flatten() == labels.flatten())
+        nok += bsize - matches
+        ok += matches
+        print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
+
+
+    acc = 100.0 * ok / (total)
+    print("Final accuracy: %f" % acc)
+
+
