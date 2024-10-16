@@ -36,6 +36,10 @@ from sklearn.model_selection import train_test_split
 from PIL import Image
 import os
 
+import cv2
+from pynq import PL
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Validate top-1 accuracy for FINN-generated accelerator"
@@ -51,7 +55,7 @@ if __name__ == "__main__":
         help='name of bitfile (i.e. "resizer.bit")',
         default="../bitfile/finn-accel.bit",
     )
-    parser.add_argument("--dataset_root", help="dataset root dir for download/reuse", default=".")
+    parser.add_argument("--dataset_root", help="dataset root dir for download/reuse", default="./")
     # parse arguments
     args = parser.parse_args()
     bsize = args.batchsize
@@ -59,6 +63,9 @@ if __name__ == "__main__":
     platform = args.platform
     dataset_root = args.dataset_root
 
+    print("Reset PL (clear cache)...")
+    PL.reset()
+    
     print("Loading dataset...")
     #(test_imgs, test_labels) = make_unsw_nb15_test_batches(bsize, dataset_root)
 
@@ -128,20 +135,33 @@ if __name__ == "__main__":
         bitfile_name=bitfile,
         platform=platform,
         io_shape_dict=io_shape_dict,
-        batch_size=bsize,
+        batch_size=1,
     )
 
     def inference_with_finn_onnx(current_inp):
-        current_inp = current_inp.reshape(input_size)
+        #current_inp = current_inp.reshape(input_size)
         out = driver.execute(current_inp)
         return finn_output
 
     print("Starting...")
 
-    for images, labels in test_df:
+    for idx in range(len(test_df)):
+        
+        img_path = test_df.iloc[idx]['image']
+        #image = Image.open(img_path).convert('RGB')
+        image = cv2.imread(img_path)
+        print(image.shape)
+        image = cv2.resize(image, (input_size[1], input_size[2]))
+        print(image.shape)
+        image = image/255.0
+        label = class_indices[test_df.iloc[idx]['label']]
+    
+        #image = data["image"]
+        #label = data["label"]
         # run in Brevitas with PyTorch tensor
         # print(images.shape)
-        current_inp = images.reshape((1, input_size[0], input_size[1], input_size[2]))
+        current_inp = image.reshape((input_size[0], input_size[1], input_size[2]))
+        print(current_inp.shape)
         finn_output = inference_with_finn_onnx(current_inp)
         
         print(finn_output)
