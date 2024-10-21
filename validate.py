@@ -51,25 +51,8 @@ if __name__ == "__main__":
     # parse arguments
     args = parser.parse_args()
     bsize = args.batchsize
-    dataset = args.dataset
     bitfile = args.bitfile
-    platform = args.platform
     dataset_root = args.dataset_root
-
-    if dataset == "mnist":
-        from dataset_loading import mnist
-
-        trainx, trainy, testx, testy, valx, valy = mnist.load_mnist_data(
-            dataset_root, download=True, one_hot=False
-        )
-    elif dataset == "cifar10":
-        from dataset_loading import cifar
-
-        trainx, trainy, testx, testy, valx, valy = cifar.load_cifar_data(
-            dataset_root, download=True, one_hot=False
-        )
-    else:
-        raise Exception("Unrecognized dataset")
 
     data_path = dataset_root + "/CT-KIDNEY-DATASET-Normal-Cyst-Tumor-Stone"
 
@@ -91,17 +74,13 @@ if __name__ == "__main__":
     train_df, dummy_df = train_test_split(data, train_size=0.8, shuffle=True, stratify=data['label'], random_state=123)
     valid_df, test_df = train_test_split(dummy_df, train_size=0.5, shuffle=True, stratify=dummy_df['label'], random_state=123)
 
-
-    test_imgs = testx
-    test_labels = testy
-
     ok = 0
     nok = 0
-    total = test_imgs.shape[0]
+    total = len(test_df)
 
     driver = FINNExampleOverlay(
         bitfile_name=bitfile,
-        platform=platform,
+        platform="zynq-iodma",
         io_shape_dict=io_shape_dict,
         batch_size=bsize,
         runtime_weight_dir="runtime_weights/",
@@ -112,7 +91,7 @@ if __name__ == "__main__":
     #test_imgs = test_imgs.reshape(n_batches, bsize, -1)
     #test_labels = test_labels.reshape(n_batches, bsize)
 
-    input_size = (3, 224, 244)
+    input_size = (3, 224, 224)
     class_indices = {label: idx for idx, label in enumerate(test_df['label'].unique())}
         
     for i in range(n_batches):
@@ -132,8 +111,9 @@ if __name__ == "__main__":
             label = class_indices[test_df.iloc[j + i*bsize]['label']]
             
             images.append(image)
-            labels.append(labels)
+            labels.append(label)
             
+        
         test_imgs = np.array(images)
         test_labels = np.array(labels)
         
@@ -141,6 +121,7 @@ if __name__ == "__main__":
         #exp = test_labels[i]
         
         ibuf_normal = test_imgs.reshape(driver.ibuf_packed_device[0].shape)
+        print(ibuf_normal.shape)
         exp = test_labels
         
         driver.copy_input_data_to_device(ibuf_normal)
@@ -150,6 +131,9 @@ if __name__ == "__main__":
         ret = np.bincount(obuf_normal.flatten() == exp.flatten())
         nok += ret[0]
         ok += ret[1]
+        
+        print(obuf_normal.shape)
+        print("gt: ", exp.flatten(), " inference: ", obuf_normal.flatten())
         print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
 
     acc = 100.0 * ok / (total)
