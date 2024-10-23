@@ -31,6 +31,7 @@ import numpy as np
 import os
 import pandas as pd
 import cv2
+from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split
 from driver import io_shape_dict
 from driver_base import FINNExampleOverlay
@@ -92,7 +93,10 @@ if __name__ == "__main__":
     #test_labels = test_labels.reshape(n_batches, bsize)
 
     input_size = (3, 224, 224)
-    class_indices = {label: idx for idx, label in enumerate(test_df['label'].unique())}
+    #class_indices = {label: idx for idx, label in enumerate(train_df['label'].unique())}
+    class_indices = {'Normal': 0, 'Tumor': 1, 'Stone': 2, 'Cyst': 3}
+    
+    print(class_indices)
         
     for i in range(n_batches):
         
@@ -103,12 +107,15 @@ if __name__ == "__main__":
         
             img_path = test_df.iloc[j + i*bsize]['image']
             #image = Image.open(img_path).convert('RGB')
-            image = cv2.imread(img_path)
+            #image = cv2.imread(img_path)
+            image = np.array(Image.open(img_path).convert('RGB'))
             print(image.shape)
+            print(image.dtype)
             image = cv2.resize(image, (input_size[1], input_size[2]))
             print(image.shape)
-            image = image
+            print(image.dtype)
             label = class_indices[test_df.iloc[j + i*bsize]['label']]
+            print(label)
             
             images.append(image)
             labels.append(label)
@@ -120,19 +127,30 @@ if __name__ == "__main__":
         #ibuf_normal = test_imgs[i].reshape(driver.ibuf_packed_device[0].shape)
         #exp = test_labels[i]
         
-        ibuf_normal = test_imgs.reshape(driver.ibuf_packed_device[0].shape)
-        print(ibuf_normal.shape)
+        #ibuf_normal = test_imgs.reshape(driver.ibuf_packed_device[0].shape)
+        #ibuf_normal = test_imgs.transpose(0, 2, 3, 1, 4)
+        #print(ibuf_normal.shape)
         exp = test_labels
         
-        driver.copy_input_data_to_device(ibuf_normal)
-        driver.execute_on_buffers()
-        obuf_normal = np.empty_like(driver.obuf_packed_device[0])
-        driver.copy_output_data_from_device(obuf_normal)
-        ret = np.bincount(obuf_normal.flatten() == exp.flatten())
-        nok += ret[0]
-        ok += ret[1]
+        #driver.copy_input_data_to_device(ibuf_normal)
+        #driver.execute_on_buffers()
+        #obuf_normal = np.empty_like(driver.obuf_packed_device[0])
+        #driver.copy_output_data_from_device(obuf_normal)
+        #ret = np.bincount(obuf_normal.flatten() == exp.flatten())
+        obuf_normal = driver.execute(test_imgs)
         
-        print(obuf_normal.shape)
+        ret = 1
+        if(obuf_normal.flatten() == exp.flatten()):
+            ret = 0
+        #print(obuf_normal.flatten())
+        #print(exp.flatten())
+        #print(ret)
+        #nok += ret[0]
+        #ok += ret[1]
+        nok += ret
+        ok += 1 - ret
+        
+        #print(obuf_normal.shape)
         print("gt: ", exp.flatten(), " inference: ", obuf_normal.flatten())
         print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
 
